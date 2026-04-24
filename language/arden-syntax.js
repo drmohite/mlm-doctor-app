@@ -60,10 +60,10 @@ window.registerArdenLanguage = function(monaco) {
         [/\/\*/, 'comment', '@blockComment'],
 
         // Section headers (maintenance:, library:, knowledge:, end:)
-        [/^(maintenance|library|knowledge|end)(\s*:)/i, ['keyword.section', 'keyword.section']],
+        [/^(?:maintenance|library|knowledge|end)\s*:/i, 'keyword.section'],
 
         // Slot names at line start (title:, mlmname:, purpose:, etc.)
-        [/^\s*(title|mlmname|arden|version|institution|author|specialist|date|validation|purpose|explanation|keywords|citations|priority|evoke|logic|action|urgency|type|data)(\s*:)/i, ['keyword.slot', 'delimiter']],
+        [/^\s*(?:title|mlmname|arden|version|institution|author|specialist|date|validation|purpose|explanation|keywords|citations|priority|evoke|logic|action|urgency|type|data)\s*:/i, 'keyword.slot'],
 
         // Double semicolons (section terminator)
         [/;;/, 'keyword.terminator'],
@@ -71,15 +71,16 @@ window.registerArdenLanguage = function(monaco) {
         // SQL strings inside { }
         [/\{/, 'delimiter.curly', '@sqlBlock'],
 
-        // String literals
-        [/"([^"]*)"/, 'string'],
-        [/'([^']*)'/, 'string.mlmname'],
+        // String literals -- no inner groups: Monaco requires ALL chars to be in groups
+        // when groups are used, so we match the whole string as one token instead.
+        [/"[^"]*"/, 'string'],
+        [/'[^']*'/, 'string.mlmname'],
 
         // Event types
-        [/\b(ClientDocumentEnter|ClientDocumentModify|ClientDocumentClose|OrderEnter|OrderModify|OrderComplete|OrderVerify|OrderInit|ObservationEnter|ObservationModify|ClientVisitEnter|ClientVisitModify|ClientVisitDischarge|AlertEnter|HealthIssueEnter|HealthIssueModify|OrderTaskEnter|OrderTaskModify|OrderRelease|CareProviderVisitRoleEnter|DocumentOpening|MLMButtonClick|DocumentClosing|AlertCheckingOrder)\b/i, 'keyword.eventtype'],
+        [/\b(?:ClientDocumentEnter|ClientDocumentModify|ClientDocumentClose|OrderEnter|OrderModify|OrderComplete|OrderVerify|OrderInit|ObservationEnter|ObservationModify|ClientVisitEnter|ClientVisitModify|ClientVisitDischarge|AlertEnter|HealthIssueEnter|HealthIssueModify|OrderTaskEnter|OrderTaskModify|OrderRelease|CareProviderVisitRoleEnter|DocumentOpening|MLMButtonClick|DocumentClosing|AlertCheckingOrder)\b/i, 'keyword.eventtype'],
 
         // Main keywords
-        [/\b(IF|THEN|ELSE|ELSEIF|ENDIF|FOR|IN|DO|ENDDO|SEQTO|WHERE|TRY|CATCH|EXCEPTION|ENDTRY|ENDCATCH|CONCLUDE|RETURN|ARGUMENT|CALL|WITH|READ|LAST|FIRST|WRITE|AT|EVENT|MLM|NEW|OBJECT|AND|OR|NOT|EXISTS|MATCHES|PATTERN|CONTAINS|SUBSTRING|CHARACTERS|STARTING|FROM|LENGTH|COUNT|AS|STRING|NUMBER|DATA-DRIVEN|TEMPORAL)\b/i, 'keyword'],
+        [/\b(?:IF|THEN|ELSE|ELSEIF|ENDIF|FOR|IN|DO|ENDDO|SEQTO|WHERE|TRY|CATCH|EXCEPTION|ENDTRY|ENDCATCH|CONCLUDE|RETURN|ARGUMENT|CALL|WITH|READ|LAST|FIRST|WRITE|AT|EVENT|MLM|NEW|OBJECT|AND|OR|NOT|EXISTS|MATCHES|PATTERN|CONTAINS|SUBSTRING|CHARACTERS|STARTING|FROM|LENGTH|COUNT|AS|STRING|NUMBER|DATA-DRIVEN|TEMPORAL)\b/i, 'keyword'],
 
         // Assignment operator
         [/:=/, 'keyword.operator'],
@@ -94,7 +95,7 @@ window.registerArdenLanguage = function(monaco) {
         [/\bSQL\s*\(/i, 'function'],
 
         // Boolean/null constants
-        [/\b(TRUE|FALSE|NULL|NOW)\b/i, 'constant'],
+        [/\b(?:TRUE|FALSE|NULL|NOW)\b/i, 'constant'],
 
         // Called_By_Editor (special flag)
         [/\bCalled_By_Editor\b/i, 'variable.special'],
@@ -102,8 +103,9 @@ window.registerArdenLanguage = function(monaco) {
         // this_documentCommunication and its properties
         [/\bthis_documentCommunication\b/i, 'variable.this'],
 
-        // Numeric literals
-        [/\b\d+(\.\d+)?\b/, 'number'],
+        // Numeric literals -- no groups (avoids Monarch group validation error)
+        [/\b\d+\.\d+\b/, 'number'],
+        [/\b\d+\b/, 'number'],
 
         // Identifiers — distinguish variables vs unknown
         [/[a-zA-Z_]\w*/, {
@@ -126,9 +128,9 @@ window.registerArdenLanguage = function(monaco) {
 
       sqlBlock: [
         [/\}/, 'delimiter.curly', '@pop'],
-        [/"([^"]*)"/, 'string'],
+        [/"[^"]*"/, 'string'],
         [/\bSQL\s*\(/i, 'function'],
-        [/\b(SELECT|FROM|WHERE|JOIN|LEFT|OUTER|INNER|AND|OR|NOT|ON|GROUP\s+BY|ORDER\s+BY|HAVING|AS|CASE|WHEN|THEN|ELSE|END|INSERT|UPDATE|DELETE|WITH|IN|IS|NULL|nolock|MAX|MIN|AVG|COUNT|TOP|CONVERT|CAST|ISNULL|COALESCE|varchar|int|datetime)\b/i, 'keyword.sql'],
+        [/\b(?:SELECT|FROM|WHERE|JOIN|LEFT|OUTER|INNER|AND|OR|NOT|ON|GROUP\s+BY|ORDER\s+BY|HAVING|AS|CASE|WHEN|THEN|ELSE|END|INSERT|UPDATE|DELETE|WITH|IN|IS|NULL|nolock|MAX|MIN|AVG|COUNT|TOP|CONVERT|CAST|ISNULL|COALESCE|varchar|int|datetime)\b/i, 'keyword.sql'],
         [/\|\|/, 'keyword.operator'],
         [/[a-zA-Z_]\w*/, 'identifier.sql'],
         [/\d+/, 'number'],
