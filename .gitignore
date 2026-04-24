@@ -1,0 +1,19 @@
+# Windows launcher scripts (not needed on the server)
+Start-Server.bat
+server.ps1
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor folders
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Node (if anyone runs npm install locally in future)
+node_modules/

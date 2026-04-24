@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MLM Doctor — Smart Arden Syntax IDE</title>
+  <meta name="description" content="MLM Doctor is a smart, Monaco-powered browser IDE for developing Arden Syntax Medical Logic Modules (MLMs). Features IntelliSense, real-time linting, hover docs, symbol navigator, and context analysis.">
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%230d1117'/%3E%3Ctext y='.9em' font-size='80' x='10'%3E%F0%9F%A9%BA%3C/text%3E%3C/svg%3E">
+
+  <!-- iOS / Apple PWA meta -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MLM Doctor">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
+  <!-- Theme colour for browser chrome -->
+  <meta name="theme-color" content="#1a6b5e">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="ide-shell">
+
+  <!-- ── Top Bar ──────────────────────────────────────────────────────────── -->
+  <header id="topbar">
+    <div class="topbar-logo">
+      <div class="logo-gem">🩺</div>
+      MLM Doctor
+    </div>
+
+    <div class="topbar-file">
+      <span id="currentFileName">No file open</span>
+    </div>
+
+    <div class="topbar-actions">
+      <!-- File Actions -->
+      <button class="tb-btn" id="btnOpenFile" onclick="openFile()" title="Open a single MLM file (Ctrl+O)">
+        📂 Open File
+      </button>
+      <button class="tb-btn" id="btnOpenFolder" onclick="openFolder()" title="Open an MLM workspace folder">
+        🗂️ Open Folder
+      </button>
+      <button class="tb-btn primary" id="btnSave" onclick="saveFile()" title="Save file (Ctrl+S)">
+        💾 Save
+      </button>
+
+      <div class="tb-sep"></div>
+
+      <!-- View toggles -->
+      <button class="tb-btn active" id="btnToggleLeft" onclick="toggleSidebar('left')" title="Toggle outline panel">
+        ◧ Outline
+      </button>
+      <button class="tb-btn active" id="btnToggleProblems" onclick="toggleProblemsPanel()" title="Toggle problems panel">
+        🔴 Problems
+        <span id="problemsCount"></span>
+      </button>
+      <button class="tb-btn active" id="btnToggleRight" onclick="toggleSidebar('right')" title="Toggle context panel">
+        ◨ Context
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Main Workspace ─────────────────────────────────────────────────── -->
+  <div id="workspace">
+
+    <!-- ── Left Sidebar: Outline + Files ────────────────────────────────── -->
+    <aside id="leftSidebar">
+
+      <!-- Workspace File List -->
+      <div class="sidebar-section" id="fileListSection">
+        <div class="sidebar-section-header">
+          <span>Workspace</span>
+          <div class="section-actions">
+            <button onclick="openFolder()" title="Open folder">🗂️</button>
+          </div>
+        </div>
+        <div id="workspaceInfo">
+          <span id="workspaceName">No folder open</span>
+          <span id="workspaceCount"></span>
+        </div>
+        <div class="file-search">
+          <input type="text" id="fileSearch" placeholder="Search MLMs…" autocomplete="off" spellcheck="false">
+        </div>
+        <div id="fileList">
+          <div class="file-empty">Open a folder to browse MLMs</div>
+        </div>
+      </div>
+
+      <!-- Outline Tree -->
+      <div class="sidebar-section" id="outlineSection">
+        <div class="sidebar-section-header">
+          <span>Outline</span>
+        </div>
+        <div id="outlineTree">
+          <div class="file-empty">Open an MLM file to see outline</div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ── Editor Column ─────────────────────────────────────────────────── -->
+    <div id="editorColumn">
+      <div id="editorMain">
+        <!-- Monaco Editor -->
+        <div id="monacoContainer"></div>
+      </div>
+
+      <!-- Problems Panel -->
+      <div id="problemsPanel">
+        <div class="problems-header">
+          <span>Problems</span>
+          <span id="problemsCount" style="margin-left:8px"></span>
+          <button style="margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;" onclick="toggleProblemsPanel()" title="Close">×</button>
+        </div>
+        <div id="problemsList">
+          <div class="problems-empty">✅ Analyse an MLM file to see diagnostics</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Right Sidebar: Context ────────────────────────────────────────── -->
+    <aside id="rightSidebar">
+
+      <!-- Metadata Card -->
+      <div id="ctxMetadata">
+        <div class="meta-card" style="padding:12px;color:var(--text-muted);font-size:11px;text-align:center;">
+          Open an MLM file to see metadata
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="ctx-tabs">
+        <button class="ctx-tab active" data-tab="vars"   title="Variables">🔶 Vars</button>
+        <button class="ctx-tab"        data-tab="mlms"   title="MLM References">📦 MLMs</button>
+        <button class="ctx-tab"        data-tab="sql"    title="SQL Queries">🗄️ SQL</button>
+        <button class="ctx-tab"        data-tab="events" title="Events &amp; Buttons">⚡ Events</button>
+        <button class="ctx-tab"        data-tab="obs"    title="Observations">📋 Obs</button>
+      </div>
+
+      <!-- Tab search -->
+      <div class="ctx-search">
+        <input type="text" id="ctxSearch" placeholder="Filter…" autocomplete="off" spellcheck="false">
+      </div>
+
+      <!-- Tab content -->
+      <div id="ctxContent">
+        <div class="ctx-empty">Open an MLM file to begin analysis</div>
+      </div>
+
+    </aside>
+
+  </div>
+
+  <!-- ── Status Bar ─────────────────────────────────────────────────────── -->
+  <footer id="statusbar">
+    <div class="status-section">
+      <span>🩺 MLM Doctor</span>
+    </div>
+    <div class="status-section">
+      <span>Arden Syntax 2.5</span>
+    </div>
+    <div class="status-section">
+      <span id="statusLinter">Ready</span>
+    </div>
+    <div class="status-right">
+      <span>Monaco Editor</span>
+      <span>UTF-8</span>
+      <span title="Right-click in editor for smart actions">Right-click for Find References &amp; Rename</span>
+    </div>
+  </footer>
+
+</div>
+
+<!-- Monaco Loader -->
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs/loader.js"></script>
+
+<!-- Data -->
+<script src="data/keywords.js"></script>
+<script src="data/snippets.js"></script>
+
+<!-- Language Engine -->
+<script src="language/arden-syntax.js"></script>
+<script src="language/arden-symbols.js"></script>
+<script src="language/arden-complete.js"></script>
+<script src="language/arden-hover.js"></script>
+<script src="language/arden-linter.js"></script>
+
+<!-- Panels -->
+<script src="panels/outline.js"></script>
+<script src="panels/problems.js"></script>
+<script src="panels/context.js"></script>
+
+<!-- Main App -->
+<script src="app.js"></script>
+
+<!-- PWA: Register Service Worker (deferred so Monaco boots first) -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('[MLM Doctor] Service Worker registered, scope:', reg.scope))
+        .catch(err => console.warn('[MLM Doctor] Service Worker registration failed (needs HTTPS or localhost):', err));
+    });
+  }
+</script>
+
+</body>
+</html>
