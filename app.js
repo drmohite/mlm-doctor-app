@@ -14,45 +14,45 @@ let _storedDirHandle = null;  // cached handle from IndexedDB
 // show a visible 'Restore workspace' banner rather than silently requesting.
 const IDB = {
   DB_NAME: 'mlm-doctor',
-  STORE:   'workspace',
-  KEY:     'lastFolder',
+  STORE: 'workspace',
+  KEY: 'lastFolder',
 
   _open() {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open(this.DB_NAME, 1);
       req.onupgradeneeded = e => e.target.result.createObjectStore(this.STORE);
       req.onsuccess = e => resolve(e.target.result);
-      req.onerror   = e => reject(e.target.error);
+      req.onerror = e => reject(e.target.error);
     });
   },
 
   async save(handle) {
     const db = await this._open();
     return new Promise((resolve, reject) => {
-      const tx  = db.transaction(this.STORE, 'readwrite');
+      const tx = db.transaction(this.STORE, 'readwrite');
       const req = tx.objectStore(this.STORE).put(handle, this.KEY);
       req.onsuccess = () => resolve();
-      req.onerror   = e => reject(e.target.error);
+      req.onerror = e => reject(e.target.error);
     });
   },
 
   async load() {
     const db = await this._open();
     return new Promise((resolve, reject) => {
-      const tx  = db.transaction(this.STORE, 'readonly');
+      const tx = db.transaction(this.STORE, 'readonly');
       const req = tx.objectStore(this.STORE).get(this.KEY);
       req.onsuccess = e => resolve(e.target.result || null);
-      req.onerror   = e => reject(e.target.error);
+      req.onerror = e => reject(e.target.error);
     });
   },
 
   async clear() {
     const db = await this._open();
     return new Promise((resolve, reject) => {
-      const tx  = db.transaction(this.STORE, 'readwrite');
+      const tx = db.transaction(this.STORE, 'readwrite');
       const req = tx.objectStore(this.STORE).delete(this.KEY);
       req.onsuccess = () => resolve();
-      req.onerror   = e => reject(e.target.error);
+      req.onerror = e => reject(e.target.error);
     });
   }
 };
@@ -65,7 +65,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       _storedDirHandle = handle;
       showRestoreBanner(handle.name);
     }
-  } catch(e) {
+  } catch (e) {
     console.warn('[MLM Doctor] Could not read stored workspace handle:', e);
   }
 });
@@ -109,7 +109,7 @@ async function restoreWorkspace() {
     // Re-load the file list from the stored handle
     await _loadDirectoryHandle(_storedDirHandle);
     document.getElementById('restoreBanner')?.remove();
-  } catch(e) {
+  } catch (e) {
     showToast('Could not restore workspace: ' + e.message, 'error');
     console.error(e);
   }
@@ -137,7 +137,7 @@ async function _loadDirectoryHandle(dirHandle) {
 // ── Monaco Bootstrap ────────────────────────────────────────────────────────
 require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs' } });
 
-require(['vs/editor/editor.main'], function() {
+require(['vs/editor/editor.main'], function () {
   // 1. Register Arden Syntax language
   window.registerArdenLanguage(monaco);
 
@@ -182,50 +182,50 @@ require(['vs/editor/editor.main'], function() {
     base: 'vs-dark',
     inherit: true,
     rules: [
-      { token: 'keyword.section',      foreground: 'c792ea', fontStyle: 'bold' },
-      { token: 'keyword.slot',         foreground: '89ddff', fontStyle: 'bold' },
-      { token: 'keyword.terminator',   foreground: 'ff5370', fontStyle: 'bold' },
-      { token: 'keyword',              foreground: '82aaff' },
-      { token: 'keyword.operator',     foreground: '89ddff' },
-      { token: 'keyword.eventtype',    foreground: 'f78c6c', fontStyle: 'italic' },
-      { token: 'keyword.sql',          foreground: '82aaff', fontStyle: 'bold' },
-      { token: 'string',               foreground: 'c3e88d' },
-      { token: 'string.mlmname',       foreground: 'ffcb6b', fontStyle: 'bold' },
-      { token: 'comment',              foreground: '546e7a', fontStyle: 'italic' },
-      { token: 'number',               foreground: 'f78c6c' },
-      { token: 'constant',             foreground: 'ff5370' },
-      { token: 'function',             foreground: 'ffcb6b', fontStyle: 'bold' },
-      { token: 'variable.special',     foreground: 'f07178', fontStyle: 'italic bold' },
-      { token: 'variable.this',        foreground: 'ffcb6b', fontStyle: 'italic' },
-      { token: 'identifier',           foreground: 'eeffff' },
-      { token: 'identifier.sql',       foreground: 'c3e88d' },
-      { token: 'delimiter.curly',      foreground: '89ddff', fontStyle: 'bold' },
-      { token: 'delimiter',            foreground: '89ddff' },
-      { token: 'text',                 foreground: 'eeffff' },
+      { token: 'keyword.section', foreground: 'c792ea', fontStyle: 'bold' },
+      { token: 'keyword.slot', foreground: '89ddff', fontStyle: 'bold' },
+      { token: 'keyword.terminator', foreground: 'ff5370', fontStyle: 'bold' },
+      { token: 'keyword', foreground: '82aaff' },
+      { token: 'keyword.operator', foreground: '89ddff' },
+      { token: 'keyword.eventtype', foreground: 'f78c6c', fontStyle: 'italic' },
+      { token: 'keyword.sql', foreground: '82aaff', fontStyle: 'bold' },
+      { token: 'string', foreground: 'c3e88d' },
+      { token: 'string.mlmname', foreground: 'ffcb6b', fontStyle: 'bold' },
+      { token: 'comment', foreground: '546e7a', fontStyle: 'italic' },
+      { token: 'number', foreground: 'f78c6c' },
+      { token: 'constant', foreground: 'ff5370' },
+      { token: 'function', foreground: 'ffcb6b', fontStyle: 'bold' },
+      { token: 'variable.special', foreground: 'f07178', fontStyle: 'italic bold' },
+      { token: 'variable.this', foreground: 'ffcb6b', fontStyle: 'italic' },
+      { token: 'identifier', foreground: 'eeffff' },
+      { token: 'identifier.sql', foreground: 'c3e88d' },
+      { token: 'delimiter.curly', foreground: '89ddff', fontStyle: 'bold' },
+      { token: 'delimiter', foreground: '89ddff' },
+      { token: 'text', foreground: 'eeffff' },
     ],
     colors: {
-      'editor.background':            '#0d1117',
-      'editor.foreground':            '#e6edf3',
-      'editor.lineHighlightBackground':'#161b22',
-      'editor.selectionBackground':   '#264f78',
+      'editor.background': '#0d1117',
+      'editor.foreground': '#e6edf3',
+      'editor.lineHighlightBackground': '#161b22',
+      'editor.selectionBackground': '#264f78',
       'editor.inactiveSelectionBackground': '#1c2433',
-      'editorLineNumber.foreground':  '#484f58',
+      'editorLineNumber.foreground': '#484f58',
       'editorLineNumber.activeForeground': '#8b949e',
-      'editorCursor.foreground':      '#58a6ff',
-      'editorWhitespace.foreground':  '#21262d',
-      'editorIndentGuide.background1':'#21262d',
+      'editorCursor.foreground': '#58a6ff',
+      'editorWhitespace.foreground': '#21262d',
+      'editorIndentGuide.background1': '#21262d',
       'editorIndentGuide.activeBackground1': '#30363d',
       'editor.wordHighlightBackground': '#264f7844',
       'editor.wordHighlightStrongBackground': '#264f7888',
       'editorBracketMatch.background': '#264f78',
-      'editorBracketMatch.border':    '#58a6ff',
-      'scrollbarSlider.background':   '#30363d',
+      'editorBracketMatch.border': '#58a6ff',
+      'scrollbarSlider.background': '#30363d',
       'scrollbarSlider.hoverBackground': '#484f58',
-      'minimap.background':           '#0d1117',
-      'editorGutter.background':      '#0d1117',
-      'editorError.foreground':       '#f85149',
-      'editorWarning.foreground':     '#e3b341',
-      'editorInfo.foreground':        '#58a6ff',
+      'minimap.background': '#0d1117',
+      'editorGutter.background': '#0d1117',
+      'editorError.foreground': '#f85149',
+      'editorWarning.foreground': '#e3b341',
+      'editorInfo.foreground': '#58a6ff',
     }
   });
 
@@ -313,7 +313,7 @@ async function openFile() {
     const file = await handle.getFile();
     const text = await file.text();
     loadContent(text, file.name, handle);
-  } catch(e) {
+  } catch (e) {
     if (e.name !== 'AbortError') console.error('File open failed:', e);
   }
 }
@@ -327,7 +327,7 @@ async function openFolder() {
     _storedDirHandle = dirHandle;
     await IDB.save(dirHandle);
     document.getElementById('restoreBanner')?.remove();
-  } catch(e) {
+  } catch (e) {
     if (e.name !== 'AbortError') console.error('Folder open failed:', e);
   }
 }
@@ -396,7 +396,7 @@ async function saveFile() {
       await writable.close();
       showToast('✅ Saved: ' + currentFile.filename);
       currentFile.text = text;
-    } catch(e) {
+    } catch (e) {
       showToast('❌ Save failed: ' + e.message, 'error');
     }
   } else {
@@ -413,7 +413,7 @@ async function saveFile() {
       currentFile.filename = handle.name;
       document.getElementById('currentFileName').textContent = handle.name;
       showToast('✅ Saved: ' + handle.name);
-    } catch(e) {
+    } catch (e) {
       if (e.name !== 'AbortError') showToast('❌ Save failed: ' + e.message, 'error');
     }
   }
@@ -423,7 +423,7 @@ async function saveFile() {
 function findAllReferences(varName) {
   if (!monacoEditor || !window.ArdenSymbols) return;
   const text = monacoEditor.getValue();
-  const refs  = window.ArdenSymbols.findReferences(text, varName);
+  const refs = window.ArdenSymbols.findReferences(text, varName);
 
   // Show results in problems panel
   const el = document.getElementById('problemsList');
@@ -471,7 +471,7 @@ function renameSymbol(oldName) {
 }
 
 // ── UI Helpers ────────────────────────────────────────────────────────────────
-function showToast(msg, type='success') {
+function showToast(msg, type = 'success') {
   const el = document.createElement('div');
   el.className = `toast toast-${type}`;
   el.textContent = msg;
@@ -499,7 +499,7 @@ function toggleSidebar(side) {
 
 function escHtml(text) {
   if (!text) return '';
-  return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ── Keyboard Shortcuts ────────────────────────────────────────────────────────
@@ -525,13 +525,13 @@ function getWelcomeContent() {
 \tarden: version 2.5;;
 \tversion: 1.00;;
 \tinstitution: DrMohite.com;;
-\tauthor: MLM Doctor;;
+\tauthor: Dr. Nitin Mohite;;
 \tdate: 2026-04-24;;
 \tvalidation: testing;;
 
 library:
 \tpurpose:
-\t\tWelcome to MLM Doctor -- your smart Arden Syntax IDE.
+\t\tWelcome to MLM Doctor -- your smart Arden Syntax IDE created by Dr. Nitin Mohite.
 
 \t\tGET STARTED:
 \t\t  1. Click "Open Folder" to load your MLM workspace
