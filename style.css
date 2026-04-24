@@ -554,7 +554,111 @@ html, body { height: 100%; overflow: hidden; background: var(--bg-0); color: var
 
 /* ── Responsive collapse ─────────────────────────────────────────────────── */
 @media (max-width: 900px) {
-  :root { --sidebar-right: 0px; }
-  #rightSidebar { display: none; }
-  #workspace { grid-template-columns: var(--sidebar-left) 1fr; }
+  :root { --sidebar-right: 0px; --sidebar-left: 0px; }
+  #workspace { grid-template-columns: 1fr; }
+  
+  #leftSidebar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 200;
+    width: 260px;
+    max-width: 85vw;
+    box-shadow: 4px 0 15px rgba(0,0,0,0.5);
+  }
+  #leftSidebar.collapsed {
+    width: 0;
+    border: none;
+    box-shadow: none;
+  }
+
+  #rightSidebar {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 200;
+    width: 300px;
+    max-width: 85vw;
+    box-shadow: -4px 0 15px rgba(0,0,0,0.5);
+  }
+  #rightSidebar.collapsed {
+    width: 0;
+    border: none;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --problems-h: 120px;
+  }
+
+  #ide-shell {
+    grid-template-rows: auto 1fr auto;
+  }
+  
+  #topbar {
+    flex-wrap: wrap;
+    padding: 8px 12px 0 12px;
+    height: auto;
+  }
+  
+  .topbar-logo {
+    flex: 1;
+  }
+  
+  .topbar-file {
+    max-width: 50%;
+    text-align: right;
+  }
+  
+  .topbar-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0;
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+    justify-content: flex-start;
+  }
+  
+  .tb-sep { display: none; }
+
+  #statusbar {
+    height: auto;
+    min-height: var(--statusbar-h);
+    flex-wrap: wrap;
+    padding: 4px 12px;
+  }
+  
+  .status-right {
+    display: none;
+  }
+  
+  .toast {
+    max-width: 90%;
+    left: 5%;
+    right: 5%;
+    bottom: 20px;
+    transform: translateY(20px);
+  }
+}
+
+/* ── Mobile Backdrop ─────────────────────────────────────────────────────── */
+#mobileBackdrop {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 150; /* Above editor (0), below sidebars (200) */
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+#mobileBackdrop.show {
+  display: block;
+  opacity: 1;
 }

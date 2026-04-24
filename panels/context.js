@@ -229,6 +229,7 @@ window.ContextPanel = {
           this.editor.revealLineInCenter(line);
           this.editor.setPosition({ lineNumber: line, column: 1 });
           this.editor.focus();
+          if (window.closeSidebarsOnMobile) window.closeSidebarsOnMobile();
         });
       }
     });

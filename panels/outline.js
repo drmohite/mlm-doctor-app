@@ -119,6 +119,7 @@ window.OutlinePanel = {
           this.editor.revealLineInCenter(item.line);
           this.editor.setPosition({ lineNumber: item.line, column: 1 });
           this.editor.focus();
+          if (window.closeSidebarsOnMobile) window.closeSidebarsOnMobile();
         });
         el.classList.add('outline-item-clickable');
       }

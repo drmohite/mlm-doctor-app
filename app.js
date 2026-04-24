@@ -57,8 +57,38 @@ const IDB = {
   }
 };
 
+let mobileBackdrop = null;
+
+function createBackdrop() {
+  if (mobileBackdrop) return;
+  mobileBackdrop = document.createElement('div');
+  mobileBackdrop.id = 'mobileBackdrop';
+  document.body.appendChild(mobileBackdrop);
+  mobileBackdrop.addEventListener('click', () => {
+    if (window.closeSidebarsOnMobile) window.closeSidebarsOnMobile();
+  });
+}
+
 // On page load: check if a workspace folder was previously opened and show banner
 window.addEventListener('DOMContentLoaded', async () => {
+  createBackdrop();
+
+  // Auto-collapse left sidebar on mobile
+  if (window.innerWidth <= 768) {
+    const leftSidebar = document.getElementById('leftSidebar');
+    const btnToggleLeft = document.getElementById('btnToggleLeft');
+    if (leftSidebar) leftSidebar.classList.add('collapsed');
+    if (btnToggleLeft) btnToggleLeft.classList.remove('active');
+  }
+  
+  // Auto-collapse right sidebar on tablet/mobile
+  if (window.innerWidth <= 900) {
+    const rightSidebar = document.getElementById('rightSidebar');
+    const btnToggleRight = document.getElementById('btnToggleRight');
+    if (rightSidebar) rightSidebar.classList.add('collapsed');
+    if (btnToggleRight) btnToggleRight.classList.remove('active');
+  }
+
   try {
     const handle = await IDB.load();
     if (handle) {
@@ -248,6 +278,11 @@ require(['vs/editor/editor.main'], function () {
     clearTimeout(symbolDebounce);
     symbolDebounce = setTimeout(analyseCurrentFile, 600);
   });
+  
+  // Close sidebars on mobile when clicking inside editor
+  monacoEditor.onMouseDown(() => {
+    if (window.closeSidebarsOnMobile) window.closeSidebarsOnMobile();
+  });
 
   // Initial analysis of welcome content
   setTimeout(analyseCurrentFile, 800);
@@ -364,6 +399,8 @@ async function loadWorkspaceFile(fileEntry) {
   items.forEach(el => {
     if (el.textContent === fileEntry.name) el.closest('.file-item').classList.add('active');
   });
+
+  if (window.closeSidebarsOnMobile) window.closeSidebarsOnMobile();
 }
 
 function loadContent(text, filename, handle) {
@@ -470,6 +507,21 @@ function renameSymbol(oldName) {
   showToast(`✏️ Renamed '${oldName}' → '${newName}'`);
 }
 
+// ── Edit Actions ──────────────────────────────────────────────────────────────
+function undo() {
+  if (monacoEditor) {
+    monacoEditor.trigger('keyboard', 'undo', null);
+    monacoEditor.focus();
+  }
+}
+
+function redo() {
+  if (monacoEditor) {
+    monacoEditor.trigger('keyboard', 'redo', null);
+    monacoEditor.focus();
+  }
+}
+
 // ── UI Helpers ────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'success') {
   const el = document.createElement('div');
@@ -494,8 +546,68 @@ function toggleProblemsPanel() {
 
 function toggleSidebar(side) {
   const el = document.getElementById(side === 'left' ? 'leftSidebar' : 'rightSidebar');
-  if (el) el.classList.toggle('collapsed');
+  if (el) {
+    // If opening on mobile, close the other sidebar first to prevent overlap
+    if (window.innerWidth <= 900 && el.classList.contains('collapsed')) {
+      if (window.closeSidebarsOnMobile) window.closeSidebarsOnMobile();
+    }
+    
+    el.classList.toggle('collapsed');
+    const btn = document.getElementById(side === 'left' ? 'btnToggleLeft' : 'btnToggleRight');
+    if (btn) {
+      if (el.classList.contains('collapsed')) {
+        btn.classList.remove('active');
+      } else {
+        btn.classList.add('active');
+      }
+    }
+    
+    // Manage backdrop
+    if (window.innerWidth <= 900) {
+      const anyOpen = (!document.getElementById('leftSidebar')?.classList.contains('collapsed')) || 
+                      (!document.getElementById('rightSidebar')?.classList.contains('collapsed'));
+      if (mobileBackdrop) {
+        if (anyOpen) mobileBackdrop.classList.add('show');
+        else mobileBackdrop.classList.remove('show');
+      }
+    }
+  }
 }
+
+window.closeSidebarsOnMobile = function() {
+  if (window.innerWidth <= 900) {
+    ['left', 'right'].forEach(side => {
+      const el = document.getElementById(side + 'Sidebar');
+      const btn = document.getElementById('btnToggle' + (side === 'left' ? 'Left' : 'Right'));
+      if (el && !el.classList.contains('collapsed')) {
+        el.classList.add('collapsed');
+        if (btn) btn.classList.remove('active');
+      }
+    });
+    if (mobileBackdrop) mobileBackdrop.classList.remove('show');
+  }
+};
+
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 900 && mobileBackdrop) {
+    mobileBackdrop.classList.remove('show');
+  } else if (window.innerWidth <= 900 && mobileBackdrop) {
+    const anyOpen = (!document.getElementById('leftSidebar')?.classList.contains('collapsed')) || 
+                    (!document.getElementById('rightSidebar')?.classList.contains('collapsed'));
+    if (anyOpen) mobileBackdrop.classList.add('show');
+  }
+});
+
+// Close sidebars if clicking outside of them on mobile
+document.addEventListener('click', (e) => {
+  if (window.innerWidth <= 900) {
+    const inLeft = e.target.closest('#leftSidebar') || e.target.closest('#btnToggleLeft');
+    const inRight = e.target.closest('#rightSidebar') || e.target.closest('#btnToggleRight');
+    if (!inLeft && !inRight) {
+      if (window.closeSidebarsOnMobile) window.closeSidebarsOnMobile();
+    }
+  }
+});
 
 function escHtml(text) {
   if (!text) return '';
