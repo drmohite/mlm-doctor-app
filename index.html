@@ -26,6 +26,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <!-- Mermaid.js for flow visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
 </head>
 <body>
 
@@ -153,8 +155,9 @@
         <button class="ctx-tab active" data-tab="vars"   title="Variables">🔶 Vars</button>
         <button class="ctx-tab"        data-tab="mlms"   title="MLM References">📦 MLMs</button>
         <button class="ctx-tab"        data-tab="sql"    title="SQL Queries">🗄️ SQL</button>
-        <button class="ctx-tab"        data-tab="events" title="Events &amp; Buttons">⚡ Events</button>
+      <button class="ctx-tab"        data-tab="events" title="Events &amp; Buttons">⚡ Events</button>
         <button class="ctx-tab"        data-tab="obs"    title="Observations">📋 Obs</button>
+        <button class="ctx-tab"        data-tab="flow"   title="Visual Flow">🌊 Flow</button>
       </div>
 
       <!-- Tab search -->
@@ -169,6 +172,25 @@
 
     </aside>
 
+  </div>
+
+  <!-- ── Full-Screen Flow Modal ─────────────────────────────────────────── -->
+  <div id="flowModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-title">🌊 MLM Logic Flow</span>
+        <div class="modal-zoom-controls">
+          <button class="zoom-btn" onclick="FlowPanel.zoomOut()" title="Zoom Out">-</button>
+          <span id="zoomLevel">100%</span>
+          <button class="zoom-btn" onclick="FlowPanel.zoomIn()" title="Zoom In">+</button>
+        </div>
+        <div class="modal-hint">🖱️ Scroll to Zoom • Drag to Pan</div>
+        <button class="modal-close" onclick="FlowPanel.closeModal()">×</button>
+      </div>
+      <div id="modalFlowContainer" class="modal-body">
+        <!-- Full-screen Mermaid graph goes here -->
+      </div>
+    </div>
   </div>
 
   <!-- ── Status Bar ─────────────────────────────────────────────────────── -->
@@ -201,6 +223,7 @@
 <!-- Language Engine -->
 <script src="language/arden-syntax.js"></script>
 <script src="language/arden-symbols.js"></script>
+<script src="language/arden-formatter.js"></script>
 <script src="language/arden-complete.js"></script>
 <script src="language/arden-hover.js"></script>
 <script src="language/arden-linter.js"></script>
@@ -209,6 +232,7 @@
 <script src="panels/outline.js"></script>
 <script src="panels/problems.js"></script>
 <script src="panels/context.js"></script>
+<script src="panels/flow.js"></script>
 
 <!-- Main App -->
 <script src="app.js"></script>

@@ -59,6 +59,9 @@ const IDB = {
 
 let mobileBackdrop = null;
 
+const IS_MAC = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+const MOD_KEY = IS_MAC ? '⌘' : 'Ctrl';
+
 function createBackdrop() {
   if (mobileBackdrop) return;
   mobileBackdrop = document.createElement('div');
@@ -69,9 +72,23 @@ function createBackdrop() {
   });
 }
 
+function updateTooltips() {
+  const map = {
+    'btnSave': `Save file (${MOD_KEY}+S)`,
+    'btnOpenFile': `Open file (${MOD_KEY}+O)`,
+    'btnUndo': `Undo (${MOD_KEY}+Z)`,
+    'btnRedo': `Redo (${MOD_KEY}+Y or ${MOD_KEY}+Shift+Z)`,
+  };
+  for (const [id, title] of Object.entries(map)) {
+    const el = document.getElementById(id);
+    if (el) el.title = title;
+  }
+}
+
 // On page load: check if a workspace folder was previously opened and show banner
 window.addEventListener('DOMContentLoaded', async () => {
   createBackdrop();
+  updateTooltips();
 
   // Auto-collapse left sidebar on mobile
   if (window.innerWidth <= 768) {
@@ -272,6 +289,7 @@ require(['vs/editor/editor.main'], function () {
   window.OutlinePanel.init(monacoEditor);
   window.ProblemsPanel.init(monacoEditor);
   window.ContextPanel.init(monacoEditor);
+  if (window.FlowPanel) window.FlowPanel.init();
 
   // 7. Re-analyse symbols on content change
   monacoEditor.onDidChangeModelContent(() => {
@@ -325,6 +343,46 @@ require(['vs/editor/editor.main'], function () {
     }
   });
 
+  // 9. Register formatting providers
+  monaco.languages.registerDocumentFormattingEditProvider('arden', {
+    provideDocumentFormattingEdits(model, options, token) {
+      const text = model.getValue();
+      const formatted = window.ArdenFormatter.format(text);
+      return [{
+        range: model.getFullModelRange(),
+        text: formatted
+      }];
+    }
+  });
+
+  monaco.languages.registerDocumentRangeFormattingEditProvider('arden', {
+    provideDocumentRangeFormattingEdits(model, range, options, token) {
+      const text = model.getValueInRange(range);
+      const formatted = window.ArdenFormatter.format(text);
+      return [{
+        range: range,
+        text: formatted
+      }];
+    }
+  });
+
+  monacoEditor.addAction({
+    id: 'mlmforge.formatCode',
+    label: '✨ Format Code',
+    contextMenuGroupId: 'mlmforge',
+    contextMenuOrder: 4,
+    keybindings: [monaco.KeyMod.Alt | monaco.KeyMod.Shift | monaco.KeyCode.KeyF],
+    run(ed) {
+      const selection = ed.getSelection();
+      if (selection && !selection.isEmpty()) {
+        ed.trigger('editor', 'editor.action.formatSelection');
+      } else {
+        ed.trigger('editor', 'editor.action.formatDocument');
+      }
+      showToast('✨ Code formatted');
+    }
+  });
+
   console.log('[MLM Doctor] Ready');
 });
 
@@ -336,6 +394,7 @@ function analyseCurrentFile() {
 
   window.OutlinePanel.update(symbols);
   window.ContextPanel.update(symbols);
+  if (window.FlowPanel) window.FlowPanel.update(symbols);
 }
 
 // ── File Operations ──────────────────────────────────────────────────────────
@@ -616,13 +675,24 @@ function escHtml(text) {
 
 // ── Keyboard Shortcuts ────────────────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+  const isMod = IS_MAC ? e.metaKey : e.ctrlKey;
+  
+  if (isMod && e.key === 's') {
     e.preventDefault();
     saveFile();
   }
-  if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+  if (isMod && e.key === 'o') {
     e.preventDefault();
     openFile();
+  }
+  if (isMod && e.key === 'z') {
+    e.preventDefault();
+    if (e.shiftKey) redo();
+    else undo();
+  }
+  if (isMod && e.key === 'y') {
+    e.preventDefault();
+    redo();
   }
 });
 

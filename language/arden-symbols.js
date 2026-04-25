@@ -18,7 +18,134 @@ window.ArdenSymbols = {
       observations: this.extractObservations(text),
       buttons:      this.extractButtons(text),
       sections:     this.extractSections(text),
+      flow:         this.extractFlow(text),
     };
+  },
+
+  // ── Logic Flow Extraction ──────────────────────────────────────────────────
+  /**
+   * Scans knowledge slots for control flow and operations in sequence
+   */
+  extractFlow(text) {
+    const dataSlot = this._getSlotContent(text, 'data');
+    const logicSlot = this._getSlotContent(text, 'logic');
+
+    return {
+      data:  this._parseSlotFlow(dataSlot.content, dataSlot.startLine),
+      logic: this._parseSlotFlow(logicSlot.content, logicSlot.startLine)
+    };
+  },
+
+  _getSlotContent(text, slotName) {
+    const lines = text.split(/\r?\n/);
+    let startLine = -1;
+    let contentLines = [];
+    let inSlot = false;
+
+    const slotRe = new RegExp(`^\\s*${slotName}\\s*:`, 'i');
+    const reservedSlots = /^\s*(data|logic|action|evoke|priority|urgency|mlmname|title|version|institution|author|specialist|date|validation|keywords|explanation|links|citations|type|arden|purpose)\s*:/i;
+    
+    for (let i = 0; i < lines.length; i++) {
+      if (slotRe.test(lines[i])) {
+        inSlot = true;
+        startLine = i + 1;
+        continue;
+      }
+      if (inSlot) {
+        // Only break on actual reserved slot headers or section terminators
+        if (reservedSlots.test(lines[i]) || /^\s*;;/.test(lines[i]) || /^\s*end\s*:/i.test(lines[i])) {
+          break; // Next slot or end of section
+        }
+        contentLines.push(lines[i]);
+      }
+    }
+    return { content: contentLines.join('\n'), startLine };
+  },
+
+  _parseSlotFlow(text, offset) {
+    if (!text) return [];
+    const steps = [];
+    const lines = text.split(/\r?\n/);
+    
+    let currentIf = null;
+
+    lines.forEach((line, idx) => {
+      const lineNum = idx + offset;
+      const stripped = line.trim();
+      const noComments = stripped.replace(/\/\/.*$/, '').trim();
+      if (!noComments) return;
+
+      const noStrings = noComments.replace(/"[^"]*"/g, '""');
+      
+      // Extract variables used (simple regex for now)
+      const varsUsed = (noComments.match(/\b[a-zA-Z_]\w*\b/g) || [])
+        .filter(v => !/^(IF|THEN|ELSE|ELSEIF|ENDIF|TRY|CATCH|ENDTRY|READ|LAST|CALL|WITH|CONCLUDE|TRUE|FALSE|NULL|AND|OR|NOT|OBJECT|EVENT)$/i.test(v));
+
+      // 1. Control Flow (Multi-line aware)
+      if (/\bIF\b/i.test(noStrings)) {
+        currentIf = { type: 'if', label: noComments, code: noComments, line: lineNum, vars: varsUsed };
+        if (/\bTHEN\b/i.test(noStrings)) {
+          steps.push(currentIf);
+          currentIf = null;
+        }
+        return;
+      }
+      
+      if (currentIf && !/\bTHEN\b/i.test(noStrings)) {
+        currentIf.label += ' ' + noComments;
+        currentIf.code += '\n' + noComments;
+        currentIf.vars = [...new Set([...currentIf.vars, ...varsUsed])];
+        return;
+      }
+      
+      if (currentIf && /\bTHEN\b/i.test(noStrings)) {
+        currentIf.label += ' ' + noComments;
+        currentIf.code += '\n' + noComments;
+        currentIf.vars = [...new Set([...currentIf.vars, ...varsUsed])];
+        steps.push(currentIf);
+        currentIf = null;
+        return;
+      }
+
+      if (/\bELSEIF\b/i.test(noStrings)) {
+        steps.push({ type: 'elseif', label: noComments, code: noComments, line: lineNum, vars: varsUsed });
+      } else if (/\bELSE\b/i.test(noStrings)) {
+        steps.push({ type: 'else', code: noComments, line: lineNum });
+      } else if (/\bENDIF\b/i.test(noStrings)) {
+        steps.push({ type: 'endif', code: noComments, line: lineNum });
+      } else if (/\bTRY\b/i.test(noStrings)) {
+        steps.push({ type: 'try', code: noComments, line: lineNum });
+      } else if (/\bCATCH\b/i.test(noStrings)) {
+        steps.push({ type: 'catch', code: noComments, line: lineNum });
+      } else if (/\bENDTRY\b/i.test(noStrings)) {
+        steps.push({ type: 'endtry', code: noComments, line: lineNum });
+      }
+
+      // 2. Operations & Assignments
+      else if (/:=/.test(noComments)) {
+        const parts = noComments.split(':=');
+        const lhs = (parts[0].match(/\b[a-zA-Z_]\w*\b/g) || []);
+        
+        let type = 'assign';
+        if (/\bREAD\b/i.test(noComments)) type = 'read';
+        if (/\bMLM\s+'/i.test(noComments)) type = 'call';
+        if (/\bEVENT\b/i.test(noComments)) type = 'event';
+        
+        steps.push({ type, label: noComments, code: noComments, line: lineNum, writes: lhs, reads: varsUsed.filter(v => !lhs.includes(v)) });
+      }
+      else if (/\bCALL\b/i.test(noStrings)) {
+        steps.push({ type: 'call', label: noComments, code: noComments, line: lineNum, vars: varsUsed });
+      } else if (/\bWRITE\b/i.test(noStrings)) {
+        steps.push({ type: 'write', label: noComments, code: noComments, line: lineNum, vars: varsUsed });
+      } else if (/\bCONCLUDE\b/i.test(noStrings)) {
+        steps.push({ type: 'conclude', label: noComments, code: noComments, line: lineNum, vars: varsUsed });
+      }
+      else if (noComments.length > 3) {
+        steps.push({ type: 'stmt', label: noComments, code: noComments, line: lineNum, vars: varsUsed });
+      }
+    });
+
+    return steps;
   },
 
   // ── Metadata ──────────────────────────────────────────────────────────────

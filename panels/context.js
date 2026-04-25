@@ -50,6 +50,7 @@ window.ContextPanel = {
       case 'sql':   return this._renderSQL(q);
       case 'events':return this._renderEvents(q);
       case 'obs':   return this._renderObs(q);
+      case 'flow':  return window.FlowPanel ? window.FlowPanel.render() : null;
     }
   },
 
