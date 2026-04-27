@@ -13,6 +13,10 @@ It provides a modern, robust IDE experience directly in the browser, featuring n
 *   **Arden Syntax Engine:** Uses a custom Monarch tokenizer built for the Monaco Editor (the same engine behind VS Code) to provide flawless syntax highlighting for Arden Syntax.
 *   **Clinical-Grade Linter:** Real-time syntax and logic validation explicitly tuned for Arden. Features smart tracking to prevent false positives inside `library` documentation, `maintenance` text, and block comments (`/* ... */`).
 *   **Persistent Workspace:** Automatically remembers your chosen working directory across browser refreshes via IndexedDB.
+*   **Semantic Flow Graph:** Flow panel renders control and dependency-aware graphs, including dispatcher-style `ButtonName` branch fan-out, branch merge points, and terminal `CONCLUDE`/`RETURN` paths.
+*   **Preview vs Fullscreen Rendering:** Compact fallback is used only for sidebar preview stability; fullscreen flow always attempts full graph rendering.
+*   **Path Highlighting:** Clicking a fullscreen flow node shows tooltip details and highlights the execution route from MLM start to the nearest terminal path.
+*   **Step Navigation in Tooltip:** Inspector includes `Previous` and `Next`; for branch points, `Next` opens a dropdown to choose the target path.
 
 ## 🚀 Getting Started Locally
 

@@ -9,6 +9,9 @@ window.FlowPanel = {
   isDragging: false,
   lastMouse: { x: 0, y: 0 },
   nodeData: {}, // Map of S0 -> full code
+  nodeMeta: {}, // Map of nodeId -> semantic node metadata
+  lastRenderGraph: null,
+  selectedNodeId: null,
 
   init() {
     if (window.mermaid) {
@@ -20,6 +23,7 @@ window.FlowPanel = {
           lineColor: '#8b949e', secondaryColor: '#21262d', tertiaryColor: '#0d1117', mainBkg: '#0d1117'
         },
         securityLevel: 'loose',
+        maxTextSize: 1000000,
         maxNodes: 50000, maxEdges: 50000,
         flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis' }
       });
@@ -29,6 +33,8 @@ window.FlowPanel = {
       const tooltip = document.getElementById('flowTooltip');
       if (tooltip && !e.target.closest('.node') && !e.target.closest('#flowTooltip')) {
         tooltip.style.display = 'none';
+        const svg = document.querySelector('#modalFlowContainer svg');
+        if (svg) this._clearRouteHighlight(svg);
       }
     });
   },
@@ -54,7 +60,9 @@ window.FlowPanel = {
     `;
     if (window.mermaid) {
       try {
-        const { svg } = await this._renderWithFallback(diagramText, this.symbols, true, 'mermaid-svg-preview');
+        const { svg } = await this._renderWithFallback(diagramText, this.symbols, true, 'mermaid-svg-preview', {
+          allowCompactFallback: true
+        });
         const graphEl = document.getElementById('mermaid-graph');
         if (graphEl) graphEl.innerHTML = svg;
       } catch (e) {
@@ -80,7 +88,9 @@ window.FlowPanel = {
     const diagramText = this._generateMermaid(this.symbols, false);
     container.innerHTML = '<div class="flow-loading">Loading Full Architectural Map…</div>';
     try {
-      const { svg, isCompact } = await this._renderWithFallback(diagramText, this.symbols, false, 'mermaid-svg-full');
+      const { svg, isCompact } = await this._renderWithFallback(diagramText, this.symbols, false, 'mermaid-svg-full', {
+        allowCompactFallback: false
+      });
       container.innerHTML = svg;
       const svgEl = container.querySelector('svg');
       if (svgEl) {
@@ -113,14 +123,16 @@ window.FlowPanel = {
   },
 
   _attachNodeListeners(svg) {
+    this._clearRouteHighlight(svg);
     const nodes = svg.querySelectorAll('.node');
     nodes.forEach(node => {
       node.style.cursor = 'help';
       node.onclick = (e) => {
         e.stopPropagation();
-        const id = node.id.split('-')[1]; // Mermaid IDs are often 'flow-S0-...'
-        const content = this.nodeData[id];
-        if (content) this.showTooltip(e.clientX, e.clientY, content);
+        const id = this._extractNodeKeyFromGroupId(node.id || '');
+        this.selectedNodeId = id;
+        this._highlightRouteForNode(svg, id);
+        this._showNodeInspector(svg, id, e.clientX, e.clientY);
       };
     });
   },
@@ -136,6 +148,122 @@ window.FlowPanel = {
     if (finalX + w > window.innerWidth) finalX = x - w - 15;
     if (finalY + h > window.innerHeight) finalY = y - h - 15;
     tt.style.left = `${finalX}px`; tt.style.top = `${finalY}px`;
+  },
+
+  _showNodeInspector(svg, nodeId, x, y) {
+    const tt = document.getElementById('flowTooltip');
+    if (!tt) return;
+    const content = this.nodeData[nodeId] || 'Node details unavailable';
+    const outgoing = this._getOutgoingNodeIds(nodeId);
+    const hasMultipleNext = outgoing.length > 1;
+
+    tt.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div class="tt-header" style="margin:0">Logic Inspector</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button id="ttPrevBtn" style="background:#111827;border:1px solid #374151;color:#e5e7eb;border-radius:6px;padding:3px 8px;cursor:pointer">Previous</button>
+          <button id="ttNextBtn" style="background:#111827;border:1px solid #374151;color:#e5e7eb;border-radius:6px;padding:3px 8px;cursor:pointer">Next</button>
+          <select id="ttNextSelect" style="display:${hasMultipleNext ? 'inline-block' : 'none'};background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:3px 6px;max-width:220px">
+            <option value="">Select branch...</option>
+            ${outgoing.map((id) => `<option value="${this._escapeHTML(id)}">${this._escapeHTML(this._nodeLabel(id))}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <pre class="tt-code">${this._escapeHTML(content)}</pre>
+    `;
+    tt.style.display = 'block';
+    this._positionTooltip(tt, x, y);
+
+    const prevBtn = document.getElementById('ttPrevBtn');
+    const nextBtn = document.getElementById('ttNextBtn');
+    const nextSelect = document.getElementById('ttNextSelect');
+
+    const prevId = this._getPreviousNodeId(nodeId);
+    if (!prevId && prevBtn) {
+      prevBtn.disabled = true;
+      prevBtn.style.opacity = '0.5';
+      prevBtn.style.cursor = 'not-allowed';
+    }
+
+    if (prevBtn) {
+      prevBtn.onclick = (evt) => {
+        evt.stopPropagation();
+        if (!prevId) return;
+        this._navigateToNode(svg, prevId);
+      };
+    }
+
+    if (nextBtn) {
+      nextBtn.onclick = (evt) => {
+        evt.stopPropagation();
+        const options = this._getOutgoingNodeIds(nodeId);
+        if (options.length === 0) return;
+        if (options.length === 1) {
+          this._navigateToNode(svg, options[0]);
+          return;
+        }
+        if (nextSelect) {
+          nextSelect.style.display = 'inline-block';
+          nextSelect.focus();
+        }
+      };
+    }
+
+    if (nextSelect) {
+      nextSelect.onchange = (evt) => {
+        evt.stopPropagation();
+        const to = nextSelect.value;
+        if (!to) return;
+        this._navigateToNode(svg, to);
+      };
+    }
+  },
+
+  _positionTooltip(tt, x, y) {
+    const w = 440;
+    const h = tt.offsetHeight;
+    let finalX = x + 15;
+    let finalY = y + 15;
+    if (finalX + w > window.innerWidth) finalX = x - w - 15;
+    if (finalY + h > window.innerHeight) finalY = y - h - 15;
+    tt.style.left = `${finalX}px`;
+    tt.style.top = `${finalY}px`;
+  },
+
+  _navigateToNode(svg, nodeId) {
+    this.selectedNodeId = nodeId;
+    this._highlightRouteForNode(svg, nodeId);
+    const group = [...svg.querySelectorAll('g.node')].find((g) =>
+      this._extractNodeKeyFromGroupId(g.id || '') === nodeId
+    );
+    if (!group) return;
+    const rect = group.getBoundingClientRect();
+    const anchorX = rect.right + 10;
+    const anchorY = rect.top + 8;
+    this._showNodeInspector(svg, nodeId, anchorX, anchorY);
+  },
+
+  _getOutgoingNodeIds(nodeId) {
+    if (!this.lastRenderGraph || !nodeId) return [];
+    const ids = this.lastRenderGraph.edges
+      .filter((e) => e.from === nodeId)
+      .map((e) => e.to);
+    return [...new Set(ids)];
+  },
+
+  _getPreviousNodeId(nodeId) {
+    if (!this.lastRenderGraph || !nodeId) return null;
+    const startId = this.lastRenderGraph.startIds?.[0];
+    if (!startId || startId === nodeId) return null;
+    const path = this._bfsPath(startId, nodeId, this.lastRenderGraph.edges);
+    if (!path || path.length < 2) return null;
+    return path[path.length - 2];
+  },
+
+  _nodeLabel(nodeId) {
+    const meta = this.nodeMeta[nodeId];
+    if (!meta) return nodeId;
+    return this._sanitizeMermaidLabel(meta.label || meta.fullText || nodeId, 72);
   },
 
   _escapeHTML(str) {
@@ -180,9 +308,11 @@ window.FlowPanel = {
    * @param {any} symbols
    * @param {boolean} isSidebar
    * @param {string} renderId
+   * @param {{allowCompactFallback?: boolean}} options
    * @returns {Promise<{svg: string, isCompact: boolean}>}
    */
-  async _renderWithFallback(diagramText, symbols, isSidebar, renderId) {
+  async _renderWithFallback(diagramText, symbols, isSidebar, renderId, options = {}) {
+    const allowCompactFallback = options.allowCompactFallback !== false;
     const renderOnce = async (id, text) => {
       await window.mermaid.parse(text);
       return window.mermaid.render(id, text);
@@ -193,10 +323,14 @@ window.FlowPanel = {
     try {
       const first = await renderOnce(renderId, diagramText);
       if (!isOverflow(first?.svg)) return { svg: first.svg, isCompact: false };
+      if (!allowCompactFallback) {
+        throw new Error('Full graph exceeded Mermaid text limits in fullscreen mode.');
+      }
       const compact = this._generateCompactMermaid(symbols, isSidebar);
       const second = await renderOnce(`${renderId}-compact`, compact);
       return { svg: second.svg, isCompact: true };
     } catch (err) {
+      if (!allowCompactFallback) throw err;
       const compact = this._generateCompactMermaid(symbols, isSidebar);
       try {
         const second = await renderOnce(`${renderId}-compact`, compact);
@@ -289,6 +423,11 @@ window.FlowPanel = {
   },
 
   _generateMermaid(symbols, isSidebar) {
+    if (symbols.structuredFlow && symbols.structuredFlow.nodes && symbols.structuredFlow.nodes.length > 0) {
+      return this._generateSemanticMermaid(symbols.structuredFlow, isSidebar);
+    }
+    this.lastRenderGraph = null;
+    this.nodeMeta = {};
     let lines = ['graph TD'];
     const allSteps = [...(symbols.flow.data || []), ...(symbols.flow.logic || [])];
     this.nodeData = {}; // Clear previous data
@@ -379,5 +518,226 @@ window.FlowPanel = {
     lines.push('  classDef m-call  fill:#0d1117,stroke:#bc8cff,color:#bc8cff');
     lines.push('  classDef action  fill:#1b4332,stroke:#3fb950,color:#3fb950');
     return lines.join('\n');
+  },
+
+  _generateSemanticMermaid(graph, isSidebar) {
+    const maxNodes = isSidebar ? 220 : 1400;
+    const maxEdges = isSidebar ? 360 : 3200;
+    const nodes = (graph.nodes || []).slice(0, maxNodes);
+    const allowed = new Set(nodes.map((n) => n.id));
+    const edges = (graph.edges || [])
+      .filter((e) => allowed.has(e.from) && allowed.has(e.to))
+      .slice(0, maxEdges);
+    this.lastRenderGraph = {
+      nodes,
+      edges,
+      startIds: nodes.filter((n) => n.kind === 'start').map((n) => n.id),
+      terminalIds: nodes.filter((n) => ['gate', 'return', 'end'].includes(n.kind)).map((n) => n.id)
+    };
+    const lines = ['graph TD'];
+    this.nodeData = {};
+    this.nodeMeta = {};
+
+    nodes.forEach((node) => {
+      const label = this._sanitizeMermaidLabel(node.label || node.fullText || node.id, isSidebar ? 64 : 110);
+      const shape = this._shapeForKind(node.kind);
+      lines.push(`  ${node.id}${shape.open}"${label}"${shape.close}`);
+      lines.push(`  class ${node.id} ${this._classForKind(node.kind)}`);
+      this.nodeData[node.id] = `${node.fullText || node.label || ''}\n(Line ${node.line || '?'})`;
+      this.nodeMeta[node.id] = node;
+    });
+
+    edges.forEach((edge) => {
+      const arrow = this._arrowForEdge(edge.kind);
+      const edgeLabel = this._sanitizeMermaidLabel(edge.label || '', 26);
+      if (edgeLabel) lines.push(`  ${edge.from} ${arrow}|"${edgeLabel}"| ${edge.to}`);
+      else lines.push(`  ${edge.from} ${arrow} ${edge.to}`);
+    });
+
+    lines.push('  classDef trigger fill:#1c2d3f,stroke:#58a6ff,color:#58a6ff');
+    lines.push('  classDef step fill:#161b22,stroke:#30363d,color:#8b949e');
+    lines.push('  classDef logic fill:#21262d,stroke:#58a6ff,color:#e6edf3');
+    lines.push('  classDef m-call fill:#0d1117,stroke:#bc8cff,color:#bc8cff');
+    lines.push('  classDef action fill:#1b4332,stroke:#3fb950,color:#3fb950');
+    lines.push('  classDef data fill:#0f2027,stroke:#4db6ac,color:#c9f7f2');
+    lines.push('  classDef merge fill:#26222e,stroke:#a78bfa,color:#efe9ff');
+    lines.push('  classDef dispatcher fill:#302303,stroke:#f59e0b,color:#fde68a');
+    return lines.join('\n');
+  },
+
+  _shapeForKind(kind) {
+    if (kind === 'condition') return { open: '{', close: '}' };
+    if (kind === 'read') return { open: '[(', close: ')]' };
+    if (kind === 'return' || kind === 'gate' || kind === 'end') return { open: '((', close: '))' };
+    return { open: '[', close: ']' };
+  },
+
+  _classForKind(kind) {
+    if (kind === 'start') return 'trigger';
+    if (kind === 'condition') return 'logic';
+    if (kind === 'call') return 'm-call';
+    if (kind === 'return' || kind === 'gate') return 'action';
+    if (kind === 'read' || kind === 'assign' || kind === 'setup') return 'data';
+    if (kind === 'merge') return 'merge';
+    if (kind === 'dispatcher') return 'dispatcher';
+    return 'step';
+  },
+
+  _arrowForEdge(kind) {
+    if (kind === 'depends_on') return '-.->';
+    if (kind === 'guarded_by') return '-->';
+    return '-->';
+  },
+
+  _sanitizeMermaidLabel(text, maxLen = 90) {
+    const cleaned = String(text || '')
+      .replace(/"/g, "'")
+      .replace(/\|/g, '/')
+      .replace(/[<>]/g, ' ')
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (cleaned.length <= maxLen) return cleaned;
+    return `${cleaned.slice(0, maxLen - 3)}...`;
+  },
+
+  _extractNodeKeyFromGroupId(rawId) {
+    const id = String(rawId || '');
+    const matches = id.match(/(sf_\d+|S\d+|C\d+|Start|End|Overflow)/g);
+    if (matches && matches.length) return matches[matches.length - 1];
+    return id;
+  },
+
+  _highlightRouteForNode(svg, selectedNodeId) {
+    if (!this.lastRenderGraph || !selectedNodeId) return;
+    const graph = this.lastRenderGraph;
+    const startId = graph.startIds?.[0];
+    if (!startId) return;
+
+    const pathToSelected = this._bfsPath(startId, selectedNodeId, graph.edges);
+    const pathToTerminal = this._bfsPathToAny(
+      selectedNodeId,
+      new Set(graph.terminalIds || []),
+      graph.edges
+    );
+
+    const nodePath = new Set();
+    const edgePath = new Set();
+    const absorbPath = (arr) => {
+      for (let i = 0; i < arr.length; i += 1) nodePath.add(arr[i]);
+      for (let i = 1; i < arr.length; i += 1) edgePath.add(`${arr[i - 1]}->${arr[i]}`);
+    };
+    absorbPath(pathToSelected);
+    absorbPath(pathToTerminal);
+    if (nodePath.size === 0) nodePath.add(selectedNodeId);
+
+    this._clearRouteHighlight(svg);
+
+    svg.querySelectorAll('g.node').forEach((group) => {
+      const key = this._extractNodeKeyFromGroupId(group.id || '');
+      if (nodePath.has(key)) {
+        group.style.filter = 'drop-shadow(0 0 8px rgba(88,166,255,0.85))';
+        const shape = group.querySelector('rect,polygon,path,ellipse,circle');
+        if (shape) {
+          shape.style.stroke = '#58a6ff';
+          shape.style.strokeWidth = '3px';
+        }
+      }
+    });
+
+    svg.querySelectorAll('g.edgePath').forEach((group) => {
+      const edgeId = String(group.id || '');
+      const ids = edgeId.match(/(sf_\d+|S\d+|C\d+|Start|End|Overflow)/g) || [];
+      if (ids.length >= 2) {
+        const key = `${ids[0]}->${ids[1]}`;
+        if (edgePath.has(key)) {
+          const path = group.querySelector('path');
+          if (path) {
+            path.style.stroke = '#58a6ff';
+            path.style.strokeWidth = '3px';
+            path.style.opacity = '1';
+          }
+        }
+      }
+    });
+  },
+
+  _clearRouteHighlight(svg) {
+    if (!svg) return;
+    svg.querySelectorAll('g.node').forEach((group) => {
+      group.style.filter = '';
+      const shape = group.querySelector('rect,polygon,path,ellipse,circle');
+      if (shape) {
+        shape.style.stroke = '';
+        shape.style.strokeWidth = '';
+      }
+    });
+    svg.querySelectorAll('g.edgePath path').forEach((path) => {
+      path.style.stroke = '';
+      path.style.strokeWidth = '';
+      path.style.opacity = '';
+    });
+  },
+
+  _bfsPath(fromId, toId, edges) {
+    if (fromId === toId) return [fromId];
+    const next = new Map();
+    edges.forEach((e) => {
+      if (!next.has(e.from)) next.set(e.from, []);
+      next.get(e.from).push(e.to);
+    });
+    const queue = [fromId];
+    const parent = new Map([[fromId, null]]);
+    while (queue.length) {
+      const cur = queue.shift();
+      const arr = next.get(cur) || [];
+      for (let i = 0; i < arr.length; i += 1) {
+        const n = arr[i];
+        if (parent.has(n)) continue;
+        parent.set(n, cur);
+        if (n === toId) {
+          const path = [n];
+          let p = cur;
+          while (p !== null) {
+            path.push(p);
+            p = parent.get(p);
+          }
+          return path.reverse();
+        }
+        queue.push(n);
+      }
+    }
+    return [fromId, toId].filter(Boolean);
+  },
+
+  _bfsPathToAny(fromId, terminalSet, edges) {
+    if (terminalSet.has(fromId)) return [fromId];
+    const next = new Map();
+    edges.forEach((e) => {
+      if (!next.has(e.from)) next.set(e.from, []);
+      next.get(e.from).push(e.to);
+    });
+    const queue = [fromId];
+    const parent = new Map([[fromId, null]]);
+    while (queue.length) {
+      const cur = queue.shift();
+      const arr = next.get(cur) || [];
+      for (let i = 0; i < arr.length; i += 1) {
+        const n = arr[i];
+        if (parent.has(n)) continue;
+        parent.set(n, cur);
+        if (terminalSet.has(n)) {
+          const path = [n];
+          let p = cur;
+          while (p !== null) {
+            path.push(p);
+            p = parent.get(p);
+          }
+          return path.reverse();
+        }
+        queue.push(n);
+      }
+    }
+    return [fromId];
   }
 };

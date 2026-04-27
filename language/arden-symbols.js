@@ -19,6 +19,7 @@ window.ArdenSymbols = {
       buttons:      this.extractButtons(text),
       sections:     this.extractSections(text),
       flow:         this.extractFlow(text),
+      structuredFlow: this.extractStructuredFlow(text),
     };
   },
 
@@ -34,6 +35,219 @@ window.ArdenSymbols = {
       data:  this._parseSlotFlow(dataSlot.content, dataSlot.startLine),
       logic: this._parseSlotFlow(logicSlot.content, logicSlot.startLine)
     };
+  },
+
+  /**
+   * Build semantic flow graph for visualisation.
+   * Graph focuses on control + data influence and supports dispatcher-style IF fan-out.
+   * @param {string} text
+   * @returns {{nodes: object[], edges: object[], meta: object}}
+   */
+  extractStructuredFlow(text) {
+    const slots = ['data', 'logic', 'action'];
+    const slotLines = [];
+    slots.forEach((slot) => {
+      const slotInfo = this._getSlotContent(text, slot);
+      if (!slotInfo.content) return;
+      const lines = slotInfo.content.split(/\r?\n/);
+      lines.forEach((line, idx) => {
+        slotLines.push({
+          slot,
+          line: slotInfo.startLine + idx,
+          text: line
+        });
+      });
+    });
+
+    const nodes = [];
+    const edges = [];
+    let nodeCounter = 0;
+    const addNode = (kind, label, fullText, line) => {
+      const id = `sf_${++nodeCounter}`;
+      nodes.push({ id, kind, label, fullText, line });
+      return id;
+    };
+    const addEdge = (from, to, kind = 'flow', label = '') => {
+      if (!from || !to || from === to) return;
+      edges.push({ from, to, kind, label });
+    };
+
+    const isExecutable = (txt) => {
+      const t = (txt || '').trim();
+      if (!t) return false;
+      if (/^\/\//.test(t)) return false;
+      if (/^\/\*/.test(t) || /^\*/.test(t) || /\*\/$/.test(t)) return false;
+      return /:=|\bIF\b|\bELSEIF\b|\bELSE\b|\bENDIF\b|\bCALL\b|\bREAD\b|\bWRITE\b|\bCONCLUDE\b|\bRETURN\b/i.test(t);
+    };
+
+    const steps = slotLines.filter((item) => isExecutable(item.text)).map((item) => ({
+      slot: item.slot,
+      line: item.line,
+      text: item.text.trim()
+    }));
+
+    const startId = addNode('start', 'Invocation', 'Invocation', 0);
+    const endId = addNode('end', 'End', 'End', 0);
+    const setupId = addNode('setup', 'Setup / Declarations', 'Setup / Declarations', 0);
+    addEdge(startId, setupId, 'flow');
+    let previousId = setupId;
+
+    const defMap = new Map();
+    const controlStack = [];
+    const dispatcherRootId = addNode('dispatcher', 'ButtonName Dispatcher', 'ButtonName Dispatcher', 0);
+    let dispatcherUsed = false;
+    let dispatcherLastBranchId = null;
+    const topLevelBranchExits = [];
+
+    for (let i = 0; i < steps.length; i += 1) {
+      const step = steps[i];
+      const textLine = step.text;
+      const lower = textLine.toLowerCase();
+
+      if (/^\s*if\b/i.test(textLine)) {
+        const conditionId = addNode('condition', this._shortLabel(textLine, 96), textLine, step.line);
+        const isDispatcher = this._isButtonDispatcherCondition(textLine);
+
+        if (isDispatcher) {
+          if (!dispatcherUsed) {
+            addEdge(previousId, dispatcherRootId, 'flow');
+            dispatcherUsed = true;
+          }
+          addEdge(dispatcherRootId, conditionId, 'branch', 'button');
+          if (dispatcherLastBranchId) {
+            addEdge(dispatcherLastBranchId, conditionId, 'scope', 'independent');
+          }
+          dispatcherLastBranchId = conditionId;
+        } else if (controlStack.length === 0) {
+          addEdge(previousId, conditionId, 'flow');
+        } else {
+          addEdge(controlStack[controlStack.length - 1].activeId, conditionId, 'branch', 'nested');
+        }
+        controlStack.push({ ifId: conditionId, activeId: conditionId, topLevel: controlStack.length === 0 });
+        previousId = conditionId;
+        continue;
+      }
+
+      if (/^\s*elseif\b/i.test(textLine)) {
+        const top = controlStack[controlStack.length - 1];
+        const conditionId = addNode('condition', this._shortLabel(textLine, 96), textLine, step.line);
+        if (top) {
+          addEdge(top.ifId, conditionId, 'branch', 'elseif');
+          top.activeId = conditionId;
+        } else {
+          addEdge(previousId, conditionId, 'flow');
+        }
+        previousId = conditionId;
+        continue;
+      }
+
+      if (/^\s*else\b/i.test(textLine)) {
+        const top = controlStack[controlStack.length - 1];
+        const elseId = addNode('condition', 'ELSE', textLine, step.line);
+        if (top) {
+          addEdge(top.ifId, elseId, 'branch', 'else');
+          top.activeId = elseId;
+        } else {
+          addEdge(previousId, elseId, 'flow');
+        }
+        previousId = elseId;
+        continue;
+      }
+
+      if (/\bendif\b/i.test(lower)) {
+        const closing = controlStack.pop();
+        const mergeId = addNode('merge', 'Branches Complete', 'Branches Complete', step.line);
+        addEdge(previousId, mergeId, 'flow');
+        if (closing && closing.topLevel) {
+          topLevelBranchExits.push(mergeId);
+        }
+        previousId = mergeId;
+        continue;
+      }
+
+      const kind = this._mapStepKind(textLine);
+      const nodeId = addNode(kind, this._shortLabel(textLine, 96), textLine, step.line);
+
+      const defs = this._extractDefs(textLine).map((s) => s.toLowerCase());
+      const uses = this._extractUses(textLine).map((s) => s.toLowerCase());
+      let linked = false;
+      uses.forEach((sym) => {
+        const source = defMap.get(sym);
+        if (source && source !== nodeId) {
+          addEdge(source, nodeId, 'depends_on');
+          linked = true;
+        }
+      });
+      if (!linked) addEdge(previousId, nodeId, 'flow');
+
+      if (controlStack.length) {
+        addEdge(controlStack[controlStack.length - 1].activeId, nodeId, 'guarded_by');
+      }
+      defs.forEach((sym) => defMap.set(sym, nodeId));
+      previousId = nodeId;
+    }
+
+    const concludeNode = nodes.find((n) => n.kind === 'gate' && /\bconclude\b/i.test(n.fullText || ''));
+    const returnNode = nodes.find((n) => n.kind === 'return' && /\breturn\b/i.test(n.fullText || ''));
+    if (topLevelBranchExits.length > 0) {
+      const sink = returnNode ? returnNode.id : (concludeNode ? concludeNode.id : previousId);
+      topLevelBranchExits.forEach((id) => addEdge(id, sink, 'flow'));
+    }
+    addEdge(previousId, endId, 'flow');
+    if (returnNode) addEdge(returnNode.id, endId, 'flow');
+
+    return {
+      nodes,
+      edges,
+      meta: {
+        dispatcherDetected: dispatcherUsed,
+        topLevelBranchCount: topLevelBranchExits.length
+      }
+    };
+  },
+
+  _isButtonDispatcherCondition(line) {
+    const text = String(line || '');
+    return /\bEventType\b/i.test(text) && /\bButtonName\b/i.test(text) && /\bMLMButtonClick\b/i.test(text);
+  },
+
+  _mapStepKind(line) {
+    const text = String(line || '');
+    if (/\bREAD\b/i.test(text)) return 'read';
+    if (/\bCALL\b/i.test(text) || /\bMLM\s+'/i.test(text)) return 'call';
+    if (/\bCONCLUDE\b/i.test(text)) return 'gate';
+    if (/\bRETURN\b/i.test(text)) return 'return';
+    if (/^\s*[a-zA-Z_]\w*\s*:=/.test(text)) return 'assign';
+    return 'stmt';
+  },
+
+  _shortLabel(line, maxLen) {
+    const clean = String(line || '').replace(/\s+/g, ' ').trim();
+    if (clean.length <= maxLen) return clean;
+    return `${clean.slice(0, maxLen - 3)}...`;
+  },
+
+  _extractDefs(line) {
+    const txt = String(line || '');
+    const tuple = txt.match(/^\s*\(([^)]+)\)\s*:=/);
+    if (tuple) {
+      return tuple[1].split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    const m = txt.match(/^\s*([a-zA-Z_]\w*)\s*:=/);
+    return m ? [m[1]] : [];
+  },
+
+  _extractUses(line) {
+    const keywords = new Set([
+      'if', 'then', 'elseif', 'else', 'endif', 'and', 'or', 'not', 'true', 'false', 'null',
+      'read', 'last', 'first', 'of', 'where', 'call', 'with', 'return', 'conclude', 'event',
+      'destination', 'sql', 'mlm', 'argument'
+    ]);
+    const txt = String(line || '')
+      .replace(/"[^"]*"/g, ' ')
+      .replace(/'[^']*'/g, ' ');
+    const tokens = txt.match(/\b[a-zA-Z_]\w*\b/g) || [];
+    return tokens.filter((t) => !keywords.has(t.toLowerCase()));
   },
 
   _getSlotContent(text, slotName) {
