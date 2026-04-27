@@ -54,7 +54,7 @@ window.FlowPanel = {
     `;
     if (window.mermaid) {
       try {
-        const { svg } = await window.mermaid.render('mermaid-svg-preview', diagramText);
+        const { svg } = await this._renderWithFallback(diagramText, this.symbols, true, 'mermaid-svg-preview');
         const graphEl = document.getElementById('mermaid-graph');
         if (graphEl) graphEl.innerHTML = svg;
       } catch (e) {
@@ -80,13 +80,26 @@ window.FlowPanel = {
     const diagramText = this._generateMermaid(this.symbols, false);
     container.innerHTML = '<div class="flow-loading">Loading Full Architectural Map…</div>';
     try {
-      const { svg } = await window.mermaid.render('mermaid-svg-full', diagramText);
+      const { svg, isCompact } = await this._renderWithFallback(diagramText, this.symbols, false, 'mermaid-svg-full');
       container.innerHTML = svg;
       const svgEl = container.querySelector('svg');
       if (svgEl) {
         svgEl.style.width = 'auto'; svgEl.style.height = 'auto';
         this._initZoomPan(container, svgEl);
         this._attachNodeListeners(svgEl);
+      }
+      if (isCompact) {
+        const note = document.createElement('div');
+        note.className = 'flow-loading';
+        note.style.position = 'absolute';
+        note.style.bottom = '12px';
+        note.style.right = '12px';
+        note.style.padding = '6px 10px';
+        note.style.borderRadius = '8px';
+        note.style.background = '#161b22';
+        note.style.border = '1px solid #30363d';
+        note.textContent = 'Large MLM rendered in compact flow mode.';
+        container.appendChild(note);
       }
     } catch (e) {
       console.error('[FlowPanel] Render Error:', e);
@@ -160,6 +173,121 @@ window.FlowPanel = {
     window.onmouseup = () => { this.isDragging = false; };
   },
 
+  /**
+   * Render Mermaid text with overflow fallback.
+   * Mermaid sometimes returns an error SVG instead of throwing.
+   * @param {string} diagramText
+   * @param {any} symbols
+   * @param {boolean} isSidebar
+   * @param {string} renderId
+   * @returns {Promise<{svg: string, isCompact: boolean}>}
+   */
+  async _renderWithFallback(diagramText, symbols, isSidebar, renderId) {
+    const renderOnce = async (id, text) => {
+      await window.mermaid.parse(text);
+      return window.mermaid.render(id, text);
+    };
+    const isOverflow = (svgText, errText = '') =>
+      /maximum text size in diagram exceeded|maxtextsize/i.test(String(svgText || '') + String(errText || ''));
+
+    try {
+      const first = await renderOnce(renderId, diagramText);
+      if (!isOverflow(first?.svg)) return { svg: first.svg, isCompact: false };
+      const compact = this._generateCompactMermaid(symbols, isSidebar);
+      const second = await renderOnce(`${renderId}-compact`, compact);
+      return { svg: second.svg, isCompact: true };
+    } catch (err) {
+      const compact = this._generateCompactMermaid(symbols, isSidebar);
+      try {
+        const second = await renderOnce(`${renderId}-compact`, compact);
+        return { svg: second.svg, isCompact: true };
+      } catch (retryErr) {
+        if (isOverflow('', retryErr?.message)) {
+          throw new Error('Maximum text size in diagram exceeded even in compact mode.');
+        }
+        throw retryErr;
+      }
+    }
+  },
+
+  /**
+   * Build a stricter Mermaid graph for very large MLMs.
+   * @param {any} symbols
+   * @param {boolean} isSidebar
+   * @returns {string}
+   */
+  _generateCompactMermaid(symbols, isSidebar) {
+    const maxBlocks = isSidebar ? 55 : 120;
+    const maxLabelLen = isSidebar ? 36 : 56;
+    const maxCodeChars = isSidebar ? 20000 : 38000;
+    const allSteps = [...(symbols.flow?.data || []), ...(symbols.flow?.logic || [])];
+    const steps = allSteps.slice(0, maxBlocks);
+    const lines = ['graph TD'];
+    const compactClean = (txt) => {
+      const cleaned = String(txt || '')
+        .replace(/[\[\]"(){}]/g, '')
+        .replace(/[<>]/g, ' ')
+        .replace(/&/g, 'and')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return cleaned.length > maxLabelLen ? `${cleaned.slice(0, maxLabelLen - 3)}...` : cleaned;
+    };
+
+    this.nodeData = {};
+    lines.push('  Start(["Trigger"])');
+    lines.push('  class Start trigger');
+    let lastId = 'Start';
+    let budget = 0;
+
+    for (let i = 0; i < steps.length; i += 1) {
+      const step = steps[i];
+      const id = `C${i}`;
+      const kind = step.type || 'stmt';
+      const raw = step.label || step.code || kind;
+      const label = compactClean(raw);
+      let shapeOpen = '[';
+      let shapeClose = ']';
+      let cssClass = 'step';
+      if (kind === 'if' || kind === 'elseif' || kind === 'else') {
+        shapeOpen = '{';
+        shapeClose = '}';
+        cssClass = 'logic';
+      } else if (kind === 'call') {
+        cssClass = 'm-call';
+      } else if (kind === 'conclude' || kind === 'return') {
+        shapeOpen = '((';
+        shapeClose = '))';
+        cssClass = 'action';
+      }
+      const nodeLine = `  ${id}${shapeOpen}"${label}"${shapeClose}`;
+      const edgeLine = `  ${lastId} --> ${id}`;
+      const classLine = `  class ${id} ${cssClass}`;
+      const nextCost = nodeLine.length + edgeLine.length + classLine.length;
+      if (budget + nextCost > maxCodeChars) break;
+      lines.push(nodeLine);
+      lines.push(edgeLine);
+      lines.push(classLine);
+      this.nodeData[id] = String(step.code || '').slice(0, 3000);
+      budget += nextCost;
+      lastId = id;
+    }
+
+    if (steps.length < allSteps.length) {
+      lines.push('  Overflow["Additional blocks hidden in compact mode"]');
+      lines.push(`  ${lastId} --> Overflow`);
+      lines.push('  class Overflow step');
+      lastId = 'Overflow';
+    }
+
+    lines.push(`  ${lastId} --> End(["End"])`);
+    lines.push('  classDef trigger fill:#1c2d3f,stroke:#58a6ff,color:#58a6ff');
+    lines.push('  classDef step    fill:#161b22,stroke:#30363d,color:#8b949e');
+    lines.push('  classDef logic   fill:#21262d,stroke:#58a6ff,color:#e6edf3');
+    lines.push('  classDef m-call  fill:#0d1117,stroke:#bc8cff,color:#bc8cff');
+    lines.push('  classDef action  fill:#1b4332,stroke:#3fb950,color:#3fb950');
+    return lines.join('\n');
+  },
+
   _generateMermaid(symbols, isSidebar) {
     let lines = ['graph TD'];
     const allSteps = [...(symbols.flow.data || []), ...(symbols.flow.logic || [])];
@@ -205,7 +333,7 @@ window.FlowPanel = {
                    (step.kind === 'call') ? `Call sub-modules (${step.steps.length} calls)` :
                    (step.kind === 'assign') ? `State initialization` : `Logic block`;
         const snippet = step.steps[0] ? cleanLabel(step.steps[0].label.substring(0, 45)) : '';
-        label = `${base}<br/><small style="opacity:0.6">e.g. ${snippet}...</small>`;
+        label = `${base} - e.g. ${snippet}...`;
         fullCode = step.steps.map(s => s.code).join('\n');
         if (step.kind === 'call') cssClass = 'm-call';
       } else if (step.type === 'if' || step.type === 'elseif') {
