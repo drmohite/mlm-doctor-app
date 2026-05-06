@@ -63,7 +63,7 @@ Then open `http://localhost:3000`.
 
 MLM Doctor is configured to be deployed as a static site.
 
-**Live deployment:** [https://mlm-doctor.onrender.com/](https://mlm-doctor.onrender.com/)
+**Live deployment:** [https://mlm-doctor-app.onrender.com/](https://mlm-doctor-app.onrender.com/)
 
 *   **Render.com:** A `render.yaml` configuration file is included, which sets up enterprise-safe security headers (`X-Frame-Options`, `X-Content-Type-Options`) and routing.
 *   **GitHub Actions / Auto Deploy:** Just push to your connected repository to trigger an automatic redeployment.
