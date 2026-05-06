@@ -4,6 +4,11 @@
 
 It provides a modern, robust IDE experience directly in the browser, featuring native file system access and an intelligent Arden Syntax tokenizer.
 
+[![Live Deploy](https://img.shields.io/website?url=https%3A%2F%2Fmlm-doctor-app.onrender.com&label=deploy&up_message=live&down_message=down)](https://mlm-doctor-app.onrender.com/)
+[![License](https://img.shields.io/github/license/drmohite/mlm-doctor-app)](LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/drmohite/mlm-doctor-app?sort=semver)](https://github.com/drmohite/mlm-doctor-app/releases)
+[![Issues](https://img.shields.io/github/issues/drmohite/mlm-doctor-app)](https://github.com/drmohite/mlm-doctor-app/issues)
+
 ---
 
 ## ✨ Features
@@ -18,6 +23,16 @@ It provides a modern, robust IDE experience directly in the browser, featuring n
 *   **Path Highlighting:** Clicking a fullscreen flow node shows tooltip details and highlights the execution route from MLM start to the nearest terminal path.
 *   **Step Navigation in Tooltip:** Inspector includes `Previous` and `Next`; for branch points, `Next` opens a dropdown to choose the target path.
 *   **Context-Aware Header Actions:** Toolbar actions only enable when they have a meaningful effect — `Save` activates only with unsaved changes, `Undo` / `Redo` mirror Monaco's history stack, while `Open File`, `Open Folder`, and panel toggles (`Outline`, `Problems`, `Context`) remain available at all times. Keyboard shortcuts (`Ctrl/Cmd+S`, `Ctrl/Cmd+Z`, `Ctrl/Cmd+Y`) honour the same gating.
+
+## 🖼️ Screenshots
+
+### Main Editor Workspace
+
+![MLM Doctor editor workspace](docs/images/editor-main.png)
+
+### Flow Visualization Modal
+
+![MLM Doctor flow viewer](docs/images/flow-viewer.png)
 
 ## 🚀 Getting Started Locally
 
@@ -65,8 +80,12 @@ MLM Doctor is configured to be deployed as a static site.
 
 **Live deployment:** [https://mlm-doctor-app.onrender.com/](https://mlm-doctor-app.onrender.com/)
 
+The Render instance is managed as a demo environment and may lag behind the
+latest GitHub commits when manual deployment mode is in use.
+
 *   **Render.com:** A `render.yaml` configuration file is included, which sets up enterprise-safe security headers (`X-Frame-Options`, `X-Content-Type-Options`) and routing.
-*   **GitHub Actions / Auto Deploy:** Just push to your connected repository to trigger an automatic redeployment.
+*   **Deployment mode:** Demo updates are published manually by the maintainer to control compute usage, so the live demo may lag behind the latest GitHub commits.
+*   **Self-hosting / Fork deployments:** Community users can deploy their own instance (including on Render) under the MIT license. In forks, update deployment URLs and project metadata in that fork's README/config to match the new environment.
 
 ## 🤝 Open Source Governance
 
@@ -75,6 +94,8 @@ MLM Doctor is configured to be deployed as a static site.
 - **Code of Conduct:** Community participation expectations are in `CODE_OF_CONDUCT.md`.
 - **Security:** Vulnerability reporting process is documented in `SECURITY.md`.
 - **Compliance Scope:** Regulatory scope and HIPAA/GDPR positioning are documented in `COMPLIANCE.md`.
+- **Privacy:** Plain-language privacy and data handling summary is documented in `PRIVACY.md`.
+- **Troubleshooting:** Common setup and runtime issues are documented in `docs/troubleshooting.md`.
 
 ## 🔮 Future Roadmap
 

@@ -45,3 +45,9 @@ Do not post exploit details, payloads, or sensitive system data in public issues
 - Triage and severity assessment: within 7 calendar days
 - Remediation timeline: based on severity and exploitability
 - Public disclosure: after a fix is available or risk is otherwise mitigated
+
+## Dependency and Security Update Cadence
+
+- Security dependency review cadence: monthly
+- Out-of-band patching: immediate for critical/high-risk vulnerabilities
+- Release communication: security-impacting fixes are summarized in `CHANGELOG.md`
