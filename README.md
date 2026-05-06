@@ -74,6 +74,7 @@ MLM Doctor is configured to be deployed as a static site.
 - **Contributing:** Contribution guidelines are documented in `CONTRIBUTING.md`.
 - **Code of Conduct:** Community participation expectations are in `CODE_OF_CONDUCT.md`.
 - **Security:** Vulnerability reporting process is documented in `SECURITY.md`.
+- **Compliance Scope:** Regulatory scope and HIPAA/GDPR positioning are documented in `COMPLIANCE.md`.
 
 ## 🔮 Future Roadmap
 
@@ -86,6 +87,11 @@ See `ROADMAP.md` for planned features including:
 ## 🗒️ Release Notes
 
 - See `CHANGELOG.md` for versioned release history and user-visible changes.
+
+## 👤 Author
+
+- Created and maintained by **Dr. Nitin Mohite**
+- LinkedIn: [https://www.linkedin.com/in/drmohite/](https://www.linkedin.com/in/drmohite/)
 
 ---
 *Note: This tool operates completely locally within your browser. Code and clinical logic are never transmitted to external servers.*
