@@ -7,6 +7,14 @@ let currentFile = null;
 let symbolDebounce = null;
 let _storedDirHandle = null;  // cached handle from IndexedDB
 
+// ── Header button state tracking ─────────────────────────────────────────────
+// Monaco does not publicly expose canUndo/canRedo. We derive availability from
+// the model's alternativeVersionId for dirty detection, and from the stream of
+// content-change events (with isUndoing/isRedoing flags) for undo/redo stacks.
+let _savedAltVersionId = 0;   // alt version id captured at load / successful save
+let _undoStackSize = 0;       // operations available to undo on current model
+let _redoStackSize = 0;       // operations available to redo on current model
+
 // ---- IndexedDB workspace persistence ----------------------------------------
 // The File System Access API handle cannot go in localStorage (not serialisable).
 // We use a tiny IDB wrapper to persist the directory handle across refreshes.
@@ -296,7 +304,21 @@ require(['vs/editor/editor.main'], function () {
     clearTimeout(symbolDebounce);
     symbolDebounce = setTimeout(analyseCurrentFile, 600);
   });
-  
+
+  // 7a. Track header button enablement (dirty state + undo/redo stack depth).
+  // Attached once on the editor — survives model swaps because these editor
+  // events forward changes from whichever model is currently active.
+  monacoEditor.onDidChangeModel(() => {
+    _resetUndoRedoTracking();
+    refreshHeaderButtonStates();
+  });
+  monacoEditor.onDidChangeModelContent((e) => {
+    _trackContentChange(e);
+    refreshHeaderButtonStates();
+  });
+  _resetUndoRedoTracking();
+  refreshHeaderButtonStates();
+
   // Close sidebars on mobile when clicking inside editor
   monacoEditor.onMouseDown(() => {
     if (window.closeSidebarsOnMobile) window.closeSidebarsOnMobile();
@@ -482,6 +504,15 @@ function loadContent(text, filename, handle) {
   analyseCurrentFile();
 }
 
+/**
+ * Persists the current Monaco buffer back to its underlying file handle, or
+ * prompts for a new location when no writable handle is associated.
+ *
+ * On a successful write the dirty baseline is advanced to the model's current
+ * alternativeVersionId, which causes `btnSave` to disable until the next edit.
+ *
+ * @returns {Promise<void>}
+ */
 async function saveFile() {
   if (!monacoEditor || !currentFile) return;
   const text = monacoEditor.getValue();
@@ -492,6 +523,8 @@ async function saveFile() {
       await writable.close();
       showToast('✅ Saved: ' + currentFile.filename);
       currentFile.text = text;
+      _savedAltVersionId = monacoEditor.getModel().getAlternativeVersionId();
+      refreshHeaderButtonStates();
     } catch (e) {
       showToast('❌ Save failed: ' + e.message, 'error');
     }
@@ -509,6 +542,8 @@ async function saveFile() {
       currentFile.filename = handle.name;
       document.getElementById('currentFileName').textContent = handle.name;
       showToast('✅ Saved: ' + handle.name);
+      _savedAltVersionId = monacoEditor.getModel().getAlternativeVersionId();
+      refreshHeaderButtonStates();
     } catch (e) {
       if (e.name !== 'AbortError') showToast('❌ Save failed: ' + e.message, 'error');
     }
@@ -567,18 +602,85 @@ function renameSymbol(oldName) {
 }
 
 // ── Edit Actions ──────────────────────────────────────────────────────────────
+/**
+ * Triggers Monaco's undo command. Becomes a no-op when the undo stack is empty
+ * so that programmatic invocation matches the disabled UI state of `btnUndo`.
+ */
 function undo() {
-  if (monacoEditor) {
-    monacoEditor.trigger('keyboard', 'undo', null);
-    monacoEditor.focus();
+  if (!monacoEditor || _undoStackSize === 0) return;
+  monacoEditor.trigger('keyboard', 'undo', null);
+  monacoEditor.focus();
+}
+
+/**
+ * Triggers Monaco's redo command. Becomes a no-op when the redo stack is empty
+ * so that programmatic invocation matches the disabled UI state of `btnRedo`.
+ */
+function redo() {
+  if (!monacoEditor || _redoStackSize === 0) return;
+  monacoEditor.trigger('keyboard', 'redo', null);
+  monacoEditor.focus();
+}
+
+// ── Header Button State ───────────────────────────────────────────────────────
+/**
+ * Resets the undo/redo stack counters and dirty baseline against the currently
+ * active Monaco model. Called when a model is swapped (file open / new content)
+ * so that history is bound to the new document's lifetime.
+ */
+function _resetUndoRedoTracking() {
+  const model = monacoEditor ? monacoEditor.getModel() : null;
+  _savedAltVersionId = model ? model.getAlternativeVersionId() : 0;
+  _undoStackSize = 0;
+  _redoStackSize = 0;
+}
+
+/**
+ * Updates undo/redo stack counters in response to Monaco content-change events.
+ * Uses the `isUndoing` / `isRedoing` flags so we can mirror the stack state
+ * without depending on private Monaco APIs.
+ *
+ * @param {{isUndoing?: boolean, isRedoing?: boolean}} e - Monaco change event.
+ */
+function _trackContentChange(e) {
+  if (e && e.isUndoing) {
+    _undoStackSize = Math.max(0, _undoStackSize - 1);
+    _redoStackSize++;
+  } else if (e && e.isRedoing) {
+    _undoStackSize++;
+    _redoStackSize = Math.max(0, _redoStackSize - 1);
+  } else {
+    _undoStackSize++;
+    _redoStackSize = 0;
   }
 }
 
-function redo() {
-  if (monacoEditor) {
-    monacoEditor.trigger('keyboard', 'redo', null);
-    monacoEditor.focus();
-  }
+/**
+ * Returns true when the active model has unsaved edits relative to the last
+ * load or successful save. Always false when no file is open.
+ *
+ * @returns {boolean}
+ */
+function _isDirty() {
+  if (!monacoEditor || !currentFile) return false;
+  const model = monacoEditor.getModel();
+  if (!model) return false;
+  return model.getAlternativeVersionId() !== _savedAltVersionId;
+}
+
+/**
+ * Synchronises the header action buttons' `disabled` state with the current
+ * editor context. Save is gated by dirty state, Undo/Redo by stack depth.
+ * Open File / Open Folder and panel toggles remain always enabled.
+ */
+function refreshHeaderButtonStates() {
+  const btnSave = document.getElementById('btnSave');
+  const btnUndo = document.getElementById('btnUndo');
+  const btnRedo = document.getElementById('btnRedo');
+
+  if (btnSave) btnSave.disabled = !_isDirty();
+  if (btnUndo) btnUndo.disabled = _undoStackSize === 0;
+  if (btnRedo) btnRedo.disabled = _redoStackSize === 0;
 }
 
 // ── UI Helpers ────────────────────────────────────────────────────────────────
@@ -674,12 +776,15 @@ function escHtml(text) {
 }
 
 // ── Keyboard Shortcuts ────────────────────────────────────────────────────────
+// Shortcuts mirror the header buttons' enabled state: a no-op shortcut should
+// have no observable effect (no toast, no focus jump) just like a disabled
+// button cannot be clicked.
 document.addEventListener('keydown', (e) => {
   const isMod = IS_MAC ? e.metaKey : e.ctrlKey;
-  
+
   if (isMod && e.key === 's') {
     e.preventDefault();
-    saveFile();
+    if (_isDirty()) saveFile();
   }
   if (isMod && e.key === 'o') {
     e.preventDefault();

@@ -131,6 +131,24 @@ html, body { height: 100%; overflow: hidden; background: var(--bg-0); color: var
 .tb-btn.primary:hover { background: #79b8ff; }
 .tb-btn.active { background: var(--bg-3); border-color: var(--blue); color: var(--blue); }
 
+/* Disabled action buttons — neutral, non-interactive look that overrides
+   primary/active variants so unavailable actions read as inert. */
+.tb-btn:disabled,
+.tb-btn[disabled] {
+  background: var(--bg-2);
+  border-color: var(--border);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+  pointer-events: none;
+}
+.tb-btn.primary:disabled,
+.tb-btn.primary[disabled] {
+  background: var(--bg-2);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
 .tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
 
 /* ── Main workspace ───────────────────────────────────────────────────────── */
